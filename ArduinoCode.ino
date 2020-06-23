@@ -3,7 +3,8 @@
 int RECV_PIN = 10;
 IRrecv irrecv(RECV_PIN);
 decode_results results;
-///////////
+
+/////////// Motor a pasos
 #include "A4988.h"
 #define MOTOR_STEPS 200
 #define DIR1 8
@@ -16,7 +17,8 @@ decode_results results;
 #define STP4 3
 #define RPM 80
 #define RPMC 50
-//Definir limit switches
+
+/////////// Limit Switches
 //Motor1 
 #define LSD1 12
 #define LSU1 11
@@ -30,16 +32,24 @@ decode_results results;
 #define LSL A6
 #define LSR A7
 
-//DRV8834 stepper(MOTOR_STEPS, DIR, STP, M0, M1);
+/////////// DRV8834 stepper(MOTOR_STEPS, DIR, STP, M0, M1);
 A4988 stepper1(MOTOR_STEPS, DIR1, STP1, LSD1, LSU1); 
 A4988 stepper2(MOTOR_STEPS, DIR2, STP2, LSD2, LSU2);
 A4988 stepper3(MOTOR_STEPS, DIR3, STP3, LSD3, LSU3);
 A4988 stepper4(MOTOR_STEPS, DIR4, STP4, LSR, LSL); //Motor de la base
+
+/////////// Acelerometro
+#include "Wire.h" // This library allows you to communicate with I2C devices.
+const int MPU_ADDR = 0x68; // I2C address of the MPU-6050. If AD0 pin is set to HIGH, the I2C address will be 0x69.
+int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
+float rollB=0;
+float pitchA=0;
+
+
+/////////// Variables
 int mult, b;
 int long a;
 String str1, str2;
-
-////variables de prueba
 boolean flag1 = true;
 float pasos =0;
 float gama=0;
@@ -49,19 +59,9 @@ char tecla=' ';
 float d1=0,d2=0;
 float d1N=0,d2N=0,d3N=0,d12N=0;
 int contador=0;
-boolean NewFlag = true;
+boolean NewFlag = False;
 char datoSerial;
 float anguloSerial=0;
-////
-
-////acelerometro
-#include "Wire.h" // This library allows you to communicate with I2C devices.
-const int MPU_ADDR = 0x68; // I2C address of the MPU-6050. If AD0 pin is set to HIGH, the I2C address will be 0x69.
-int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
-int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
-int16_t temperature; // variables for temperature data
-float rollB=0;
-float pitchA=0;
 
 char tmp_str[7]; // temporary variable used in convert function
 char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
@@ -69,7 +69,7 @@ char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, r
   return tmp_str;
   
 }
-////
+
 void moveEverythingUp(short stop_pin1,short stop_pin2, short stop_pin3){
   boolean m1=true;
   boolean m2=true;
@@ -98,31 +98,15 @@ void centerProyector(){
     stepper4.move(-2);
     if(analogRead(A7) > 1000) tocoIzquierda = true;
   }
-//  while(not(tocoDerecha)){
-//    stepper4.move(-2);
-//    pasos=pasos+2;
-//    if(analogRead(A7) > 1000) tocoDerecha = true;
-//    }
-  //Pasos necesarios para ir de un extremo al centro.
-  //Antes eran 278
+  
   stepper4.move(278);
 }
+
 void initialPosition(){
-//  stepper1.begin(150,mult);
-//  stepper2.begin(150,mult);
-//  stepper3.begin(150,mult);
-//  stepper4.begin(150,mult);
-//  stepper1.moveuntil(LSU1);
-//  stepper2.moveuntil(LSU2);
-//  stepper3.moveuntil(LSU3);
   moveEverythingUp(LSU1,LSU2,LSU3);
   centerProyector();
-//  Serial.println("PROYECTOR CENTRADO");  
-//  stepper1.begin(RPM,mult);
-//  stepper2.begin(RPM,mult);
-//  stepper3.begin(RPM,mult);
-//  stepper4.begin(RPM,mult);
 }
+
 float distanciaMotor1(float gama, float alfaPrima){
   float d1;
   gama=gama*PI/180;
@@ -130,6 +114,7 @@ float distanciaMotor1(float gama, float alfaPrima){
   d1 = (487*cos(gama)*sin(alfaPrima))/(2*sqrt(1 - pow(cos(gama),2)*pow(sin(alfaPrima),2))) + (355*sin(alfaPrima)*sin(gama))/(2*sqrt(1 - pow(sin(alfaPrima),2)*pow(sin(gama),2)));
   return d1;
 }
+
 float distanciaMotor2(float gama, float alfaPrima){
   float d2;
   gama=gama*PI/180;
@@ -137,14 +122,17 @@ float distanciaMotor2(float gama, float alfaPrima){
   d2 = (487*cos(gama)*sin(alfaPrima))/(2*sqrt(1 - pow(cos(gama),2)*pow(sin(alfaPrima),2))) - (355*sin(alfaPrima)*sin(gama))/(2*sqrt(1 - pow(sin(alfaPrima),2)*pow(sin(gama),2)));
   return d2;
 }
+
 int distanciaAPasos(float d){
     int steps;
     steps = (int)(d*1600/(PI*12.3));
     return steps;
 }
+
 int pasosMotorCentral(float gama){
   return (int)(gama*278/30);
 }
+
 char teclaPresionada(decode_results *results){
   char past = ' ';
   if (results->value == 16753245){
@@ -184,25 +172,7 @@ char teclaPresionada(decode_results *results){
   }
   return(past);  
 }
-/*void deltaAlfaPrima(){
-  if (tecla == 'U'){
-    alfaPrima++;
-  }else if (tecla == 'D'){
-    alfaPrima--;
-  }else{
-    alfaPrima=alfaPrima;
-  }
- }*/
-/*void deltaGama(){
-  
-  if(tecla == 'R'){
-    gama++; 
-  }else if(tecla == 'L'){
-    gama--; 
-  }else{
-    gama=gama;
-  }
-}*/
+
 void deltaAlfaPrima(float stp){
   if( gama == 0 ){
     if( (tecla=='U') and (digitalRead(LSD1) == LOW) and (digitalRead(LSD2) == LOW)){
@@ -236,6 +206,7 @@ void deltaAlfaPrima(float stp){
     //No puede entrar aqui ni a PUTAZOS
   }
 }
+
 void deltaGama(float stp){
   if( alfaPrima == 0){
     if( (tecla == 'R') and (analogRead(LSR) < 1000)){
@@ -256,6 +227,7 @@ void deltaGama(float stp){
     }
   }
 }
+
 void acelerometro(){
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x3B); // starting with register 0x3B (ACCEL_XOUT_H) [MPU-6000 and MPU-6050 Register Map and Descriptions Revision 4.2, p.40]
@@ -269,65 +241,49 @@ void acelerometro(){
 
   rollB =  round(- atan((float)accelerometer_y / sqrt(pow((float)accelerometer_x, 2) + pow((float)accelerometer_z, 2))) * 180 / PI);
   pitchA =  round(- atan(-1 * (float)accelerometer_x / sqrt(pow((float)accelerometer_y, 2) + pow((float)accelerometer_z, 2))) * 180 / PI);
-
-  // print out data
-//  Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
-//  Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
-//  Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accelerometer_z));
-//  Serial.print("  beta = "); Serial.print(rollB); 
-//  Serial.print(" | alfa = "); Serial.print(pitchA); 
-  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
-//  Serial.println();
-  
-  // delay
-  //delay(500);
 }
+
 void nivelacion(){
   delay(1000);
   acelerometro();
- //Nivelacion Lateral
- if (rollB > 0){
-  //bajamos el motor 2 mientras el motor 1 queda fijo
-  d2N=355*tan(rollB*PI/180);
-  stepper2.move(-round(distanciaAPasos(d2N)));
- } 
- else if(rollB < 0){
-   //bajamos el motor 1 mientras el motor 2 queda fijo
-  d1N=-355*tan(rollB*PI/180);
-  stepper1.move(-round(distanciaAPasos(d1N))); 
- }
- else{
-  //Se encuentra nivelado de manera lateral.
- }
+  //Nivelacion Lateral
+  if (rollB > 0) {
+    //bajamos el motor 2 mientras el motor 1 queda fijo
+    d2N=355*tan(rollB*PI/180);
+    stepper2.move(-round(distanciaAPasos(d2N)));
+  } else if(rollB < 0) {
+    //bajamos el motor 1 mientras el motor 2 queda fijo
+    d1N=-355*tan(rollB*PI/180);
+    stepper1.move(-round(distanciaAPasos(d1N))); 
+  } else{
+    //Se encuentra nivelado de manera lateral.
+  }
   delay(1000);
   acelerometro();
- //Nivelacion Frontral
- if (pitchA > 0){
-  d3N = 243.5*tan(pitchA*PI/180)/*+(d1N+d2N)/2*/;
-  stepper3.move(-round(distanciaAPasos(d3N)));
- } 
- else if(pitchA < 0){
-  d12N = -243.5*tan(pitchA*PI/180);
-  stepper1.move(-round(distanciaAPasos(d12N)));
-  stepper2.move(-round(distanciaAPasos(d12N)));
- }
- else{
-  //Se encuentra nivelado de manera frontal.
- }
-
+  //Nivelacion Frontral
+  if (pitchA > 0){
+    d3N = 243.5*tan(pitchA*PI/180)/*+(d1N+d2N)/2*/;
+    stepper3.move(-round(distanciaAPasos(d3N)));
+  } else if(pitchA < 0){
+    d12N = -243.5*tan(pitchA*PI/180);
+    stepper1.move(-round(distanciaAPasos(d12N)));
+    stepper2.move(-round(distanciaAPasos(d12N)));
+  } else{
+    //Se encuentra nivelado de manera frontal.
+  }
 }
+
 void moverAnguloSerial(float angulo,float stp){
   //defines el sentido de giro
   if(angulo > 0){
     tecla = 'R';
-  }else if(angulo < 0){
+  } else if(angulo < 0){
     tecla = 'L';
-  }else{
+  } else{
     tecla = ' ';
   }
 
   for(float i=0; i< abs(angulo); i = i + stp){
-    
     deltaGama(stp);
     
     stepper1.move(distanciaAPasos(d1-distanciaMotor1(gama,alfaPrima))); 
@@ -340,6 +296,7 @@ void moverAnguloSerial(float angulo,float stp){
   }
   tecla = ' ';
 }
+
 void setup() {
   Wire.begin();
   Wire.beginTransmission(MPU_ADDR); // Begins a transmission to the I2C slave (GY-521 board)
@@ -368,30 +325,18 @@ void setup() {
   stepper3.setRPM(RPM);
   stepper4.setRPM(RPMC);
   
-// 122 115
-//  Espera a que un numero sea ingresado desde el serial para realizar el seteo de los motores. 
-//  int tecla = 0;
-//  char dato;
-//
-//  while (tecla == 0){
-//    dato = Serial.read();
-//    tecla = String(dato).toInt();
-//  }
-
   initialPosition();
   nivelacion();
 
   pinMode(13,OUTPUT);
   delay(1000);
-  /////////// CONTROL REMOTO
   irrecv.enableIRIn(); // Empezamos la recepción  por IR
-  ///////////
-  
 }
+
 void loop() {
 
   if (irrecv.decode(&results)) {
-    tecla=teclaPresionada(&results);
+    tecla = teclaPresionada(&results);
     irrecv.resume(); // empezamos una nueva recepción
 
     deltaGama(1.0);
@@ -403,19 +348,12 @@ void loop() {
     
     d1 = distanciaMotor1(gama,alfaPrima);
     d2 = distanciaMotor2(gama,alfaPrima);
-    gamaAux=gama;
+    gamaAux = gama;
 
-    tecla=' ';
+    tecla = ' ';
     contador = 0;
     NewFlag = true;
   }
-  
-  //anguloSerial = Serial.parseFloat();
-  
-  /*if(anguloSerial != 0){
-    moverAnguloSerial(anguloSerial,0.5);
-  }*/
-  
   
   if(NewFlag){
     contador++;
@@ -428,5 +366,4 @@ void loop() {
   }
   
   delay(1);
- 
 }
