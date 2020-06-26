@@ -1,85 +1,145 @@
-import os
 import cv2
+import time
 import serial
 import numpy as np
 import RPi.GPIO as GPIO
-import matplotlib.pyplot as plt
+from gpiozero import LED
+#import matplotlib.pyplot as pltfrom
 
 class Arduino():
     def __init__(self):
-        ser = serial.Serial('/dev/ttyACM0')  # open serial port
-        print(ser.name)         # check which port was really used
-        for x in range(10):
-            aux = ''
-            p = ser.read().decode()
-            while p != '\n':
-                aux += p
-                p = ser.read().decode()
-            print(aux)
+        self.ser = serial.Serial('/dev/ttyUSB0')  # open serial port
+        print(self.ser.name)         # check which port was really used
+    
+    def getLine(self):
+        aux, p = '', ''
+        while p != '\n':
+            aux += p
+            p = self.ser.read().decode()
+        return aux
             
-        ser.close()  
-
-        return None
+    def close(self):
+        self.ser.close()
 
 class RaspBerry():
     def __init__(self):
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
-
-    def setPWM(self,a,b):
-        x = 0
-        y = 0
-
+        self.led = LED(17)
+        self.act = LED(16)
+        
+        self.led.off()
+        self.act.off()
+        
+        self.flag = True #Next state
+        
+        GPIO.setup(12, GPIO.OUT)
         GPIO.setup(18, GPIO.OUT)
-        GPIO.setup(12, GPIO.OUT)
+        
+        self.keyst = GPIO.PWM(12, 100) #7, 21
+        self.lente = GPIO.PWM(18, 100) #6, 20
+        
+        self.k = 16
+        self.l = 16
+        
+        self.keyst.start(self.k)
+        self.lente.start(self.l)
+    
+    def PWMKeyst(self,x):
+        if x < 2.36:
+            self.k = -0.178182*x + 16.586438
+        else:
+            self.k = -0.173347*x + 15.006346
+            #y = -0.1758242*x + 15.3461538
+        print('Keyst',x,self.k)
+        self.act.on()
+        self.keyst.ChangeDutyCycle(self.k)
+        time.sleep(1)
+        self.act.off()
 
-        lente = GPIO.PWM(18, 100) #6, 20
-        keyst = GPIO.PWM(12, 100) #7, 21
-
-        lente.start(x)
-        keyst.start(y)
-
-        lente.ChangeDutyCycle(x)
-        keyst.ChangeDutyCycle(y)
-
-        GPIO.setup(18, GPIO.IN)
-        GPIO.setup(12, GPIO.OUT)
-        return None
+    def PWMLente(self,x):
+        self.l = -0.00000055050*x**3 + 0.00046548998*x**2 - 0.13211757420*x + 23.45524312608
+        print('Lente',x,self.l)
+        self.act.on()
+        self.lente.ChangeDutyCycle(self.l)
+        time.sleep(1)
+        self.act.off()
+    
+    def ChangePWM(self,A):
+        if A == 'LU':
+            self.l = min(21,self.l + 0.5)
+            self.act.on()
+            self.lente.ChangeDutyCycle(self.l)
+            time.sleep(.3)
+            self.act.off()
+            print('Lente:', self.l)
+        elif A == 'LD':
+            self.l = max(10,self.l - 0.5)
+            self.act.on()
+            self.lente.ChangeDutyCycle(self.l)
+            time.sleep(.3)
+            self.act.off()
+            print('Lente:', self.l)
+        elif A == 'KL':
+            self.k = min(22,self.k + 0.5)
+            self.act.on()
+            self.keyst.ChangeDutyCycle(self.k)
+            time.sleep(.3)
+            self.act.off()
+            print('Keyst:', self.k)
+        elif A == 'KR':
+            self.k = max(10,self.k - 0.5)
+            self.act.on()
+            self.keyst.ChangeDutyCycle(self.k)
+            time.sleep(.3)
+            self.act.off()
+            print('Keyst:', self.k)
     
     def swapHDMI(self):
-        return None
-
-class Camaras():
-    def __init__(self):
-        # Camara izquierda
-        self.cap1 = cv2.VideoCapture(0)
-        self.cap1.set(3, 1280)
-        self.cap1.set(4, 960)
-        self.cap1.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
-
-        # Camara derecha
-        self.cap2 = cv2.VideoCapture(2)
-        self.cap2.set(3, 1280)
-        self.cap2.set(4, 960)
-        self.cap2.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
+        if self.flag:
+            self.led.on()
+        else:
+            self.led.off()
+        self.flag = not self.flag
     
-    def Fotos(self):
-        ret1, frameL = self.cap1.read()
-        self.cap1.release()
+    def putRasp(self):
+        self.led.on()
+        self.flag = False
+    
+    def putLap(self):
+        self.led.off()
+        self.flag = True
 
-        ret2, frameR = self.cap2.read()
-        frameR = cv2.rotate(frameR, cv2.ROTATE_180)
-        self.cap2.release()
+def Camaras():
+    # Camara izquierda
+    cap1 = cv2.VideoCapture(0)
+    cap1.set(3, 1280)
+    cap1.set(4, 960)
+    cap1.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
 
-        sclp = 0.1
-        wth = int(1280* sclp)
-        hht = int(960 * sclp)
+    # Camara derecha
+    cap2 = cv2.VideoCapture(2)
+    cap2.set(3, 1280)
+    cap2.set(4, 960)
+    cap2.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
+    
+    ret1, frameL = cap1.read()
+    cap1.release()
+    del cap1
+    ret2, frameR = cap2.read()
+    cap2.release()
+    del cap2
+    frameR = cv2.rotate(frameR, cv2.ROTATE_180)
 
-        framel = cv2.resize(frameL, (wth, hht))
-        framer = cv2.resize(frameR, (wth, hht))
+    sclp = 0.1
+    wth = int(1280* sclp)
+    hht = int(960 * sclp)
 
-        return frameL, frameR, framel, framer
+    framel = cv2.resize(frameL, (wth, hht))
+    framer = cv2.resize(frameR, (wth, hht))
 
+    return frameL, frameR, framel, framer
+    
 def binFondos(img,b):
     R = len(img)
     C = len(img[0])
@@ -200,31 +260,43 @@ def getFondos(img,b,xl,yl,xr,yr):
 
     fx1 = [0 for c in range(C)]
     fy1 = [0 for r in range(R)]
-    for r in range(10*yl-50,10*yl+50):
-        for c in range(10*xl-50,10*xl+50):
+    for r in range(10*yl-80,10*yl+80):
+        for c in range(10*xl-80,10*xl+80):
             if 3*img[r][c][2] >= sum(img[r][c]) + 2*b:
                 fx1[c] += 1
                 fy1[r] += 1    
     x1 = [(c+1)*fx1[c] for c in range(C)]
     y1 = [(r+1)*fy1[r] for r in range(R)]
-    nxl = int(round(sum(x1)/sum(fx1),0)) #Center left X
-    nyl = int(round(sum(y1)/sum(fy1),0)) #Center left Y
+    if sum(fx1) == 0:
+        nxl = 10*xl
+    else:
+        nxl = int(round(sum(x1)/sum(fx1),0)) #Center left X
+    if sum(fy1) == 0:
+        nyl = 10*yl
+    else:
+        nyl = int(round(sum(y1)/sum(fy1),0)) #Center left Y
 
     fx2 = [0 for c in range(C)]
     fy2 = [0 for r in range(R)]
-    for r in range(10*yr-50,10*yr+50):
-        for c in range(10*xr-50,10*xr+50):
+    for r in range(10*yr-80,10*yr+80):
+        for c in range(10*xr-80,10*xr+80):
             if 3*img[r][c][2] >= sum(img[r][c]) + 2*b:
                 fx2[c] += 1
                 fy2[r] += 1
     x2 = [(c+1)*fx2[c] for c in range(C)]
     y2 = [(r+1)*fy2[r] for r in range(R)]
-    nxr = int(round(sum(x2)/sum(fx2),0)) #Center right X
-    nyr = int(round(sum(y2)/sum(fy2),0)) #Center right Y
+    if sum(fx2) == 0:
+        nxr = 10*xr
+    else:
+        nxr = int(round(sum(x2)/sum(fx2),0)) #Center right X
+    if sum(fy2) == 0:
+        nyr = 10*yr
+    else:
+        nyr = int(round(sum(y2)/sum(fy2),0)) #Center right Y
 
     return nxl, nyl, nxr, nyr
 
-def getFondo(img,b,c,x,y):
+def getFondo(img,b,x,y):
     R = len(img)
     C = len(img[0])
 
@@ -232,7 +304,7 @@ def getFondo(img,b,c,x,y):
     fy = [0 for r in range(R)]
     for r in range(10*y-50,10*y+50):
         for c in range(10*x-50,10*x+50):
-            if 3*img[r][c][2] >= sum(img[r][c]) + 2*b:
+            if 3*img[r][c][0] >= sum(img[r][c]) + 2*b:
                 fx[c] += 1
                 fy[r] += 1    
     x = [(c+1)*fx[c] for c in range(C)]
@@ -254,7 +326,6 @@ def Coordenadas(lx,ly,rx,ry):
 
     dx = lx - rx
     d = b*f/dx
-    print(d)
     er = 1.976-0.11826*d+0.00165*d*d
     zf = d+er
 
@@ -280,44 +351,57 @@ def Angulo(xl,yl,zl,xr,yr,zr,theta):
     dl = ( (zl*zl + yl*yl)**0.5 ) * cl
     dr = ( (zr*zr + yr*yr)**0.5 ) * cr
     
-    print(dl, dr)
-    
+    #print(dl, dr)
     delta = np.arctan((dr-dl)/(xr-xl))
-    
     return np.rad2deg(delta)
 
-cams = Camaras()
-imgL, imgR, imgl, imgr = cams.Fotos()
+RB = RaspBerry()
+Nano = Arduino()
+print('Iniciado')
 
-lxl,lyl,lxr,lyr = binFondos(imgl,70)
-rxl,ryl,rxr,ryr = binFondos(imgr,70)
-print(lxl,lyl,lxr,lyr)
-print(rxl,ryl,rxr,ryr)
+while (True):
+    lec = Nano.getLine()
+    print('Lectura Control Remoto:',lec)
+    if lec[:4] == 'EXIT':
+        RB.putRasp()
+        break
+    elif lec[:2] in ['LU','LD','KL','KR']:
+        RB.ChangePWM(lec[:2])
+        continue
+    elif lec[:2] == 'SW':
+        RB.swapHDMI()
+        continue
+    elif ' ' in lec:
+        beta, alfa = map(float,lec.split())
+        print(beta,alfa)
+        
+        RB.putRasp()
+        imgL, imgR, imgl, imgr = Camaras()
+        lxl,lyl,lxr,lyr = binFondos(imgl,70)
+        rxl,ryl,rxr,ryr = binFondos(imgr,70)
+        nlxl,nlyl,nlxr,nlyr = getFondos(imgL,70,lxl,lyl,lxr,lyr)
+        nrxl,nryl,nrxr,nryr = getFondos(imgR,70,rxl,ryl,rxr,ryr)
+        xl,yl,zl = Coordenadas(nlxl,nlyl,nrxl,nryl) # Circulo izquierdo
+        xr,yr,zr = Coordenadas(nlxr,nlyr,nrxr,nryr) # Circulo derecho
+        delta = Angulo(xl,yl,zl,xr,yr,zr,0)
+        RB.PWMKeyst(delta)
+        print('Circulo Izquierdo: x=',round(xl,2),', y=',round(yl,2),'z=',round(zl,2))
+        print('Circulo Derecho: x=',round(xr,2),', y=',round(yr,2),', z=',round(zr,2))
+        print('Angulos:',alfa,delta)
+        
+        imgL, imgR, imgl, imgr = Camaras()
+        lxc, lyc = binFondo(imgl,70)
+        rxc, ryc = binFondo(imgr,70)
+        nlxc, nlyc = getFondo(imgL,70,lxc,lyc)
+        nrxc, nryc = getFondo(imgR,70,rxc,ryc)
+        xc,yc,zc = Coordenadas(nlxc,nlyc,nrxc,nryc) # Circulo central
+        RB.PWMLente(zc)
+        print('Centro: x=',round(xc,2),', y=',round(yc,2),', z=',round(zc,2))        
+        RB.putLap()
 
-nlxl,nlyl,nlxr,nlyr = getFondos(imgL,70,lxl,lyl,lxr,lyr)
-nrxl,nryl,nrxr,nryr = getFondos(imgR,70,rxl,ryl,rxr,ryr)
-print(nlxl,nlyl,nlxr,nlyr)
-print(nrxl,nryl,nrxr,nryr)
+Nano.close()
 
-xl,yl,zl = Coordenadas(nlxl,nlyl,nrxl,nryl) # Circulo izquierdo
-xr,yr,zr = Coordenadas(nlxr,nlyr,nrxr,nryr) # Circulo derecho
-print(xl,yl,zl)
-print(xr,yr,zr)
-
-theta = 0
-delta = Angulo(xl,yl,zl,xr,yr,zr,theta)
-print(delta)
-
-imgL, imgR, imgl, imgr = cams.Fotos()
-lxc, lyc = binFondos(imgl,70)
-rxc, ryc = binFondos(imgr,70)
-
-nlxc, nlyc = getFondo(imgL,70,lxc,lyc)
-nrxc, nryc = getFondo(imgR,70,rxc,ryc)
-
-xc,yc,zc = Coordenadas(nlxc,nlyc,nrxc,nryc) # Circulo central
-print(xc,yc,zc)
-
+#cams.Cierre()
 #plt.subplot(121)
 #plt.imshow(imgL)
 #plt.subplot(122)
