@@ -15,8 +15,9 @@ decode_results results;
 #define STP3 5
 #define DIR4 2
 #define STP4 3
-#define RPM 80
-#define RPMC 50
+#define RPM 100
+#define RPMC 10
+#define MULT 4
 
 /////////// Limit Switches
 //Motor1 
@@ -42,75 +43,45 @@ A4988 stepper4(MOTOR_STEPS, DIR4, STP4, LSR, LSL); //Motor de la base
 #include "Wire.h" // This library allows you to communicate with I2C devices.
 const int MPU_ADDR = 0x68; // I2C address of the MPU-6050. If AD0 pin is set to HIGH, the I2C address will be 0x69.
 int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
-float rollB=0;
-float pitchA=0;
-
+float rollB = 0;
+float pitchA = 0;
 
 /////////// Variables
 int mult, b;
 int long a;
-String str1, str2;
-boolean flag1 = true;
-float pasos =0;
-float gama=0;
-float gamaAux=0;
-float alfaPrima=0;
-char tecla=' ';
-float d1=0,d2=0;
-float d1N=0,d2N=0,d3N=0,d12N=0;
-int contador=0;
-boolean NewFlag = False;
+bool flag1 = true;
+float pasos = 0;
+float gama = 0;
+float gamaAux = 0;
+float alfaPrima = 0;
+char tecla = ' ', ptecla = ' ';
+float d1 = 0, d2 = 0;
+float d1N = 0, d2N = 0, d3N = 0, d12N = 0;
 char datoSerial;
-float anguloSerial=0;
+float anguloSerial = 0;
 
 char tmp_str[7]; // temporary variable used in convert function
 char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
   sprintf(tmp_str, "%6d", i);
   return tmp_str;
-  
 }
 
-void moveEverythingUp(short stop_pin1,short stop_pin2, short stop_pin3){
-  boolean m1=true;
-  boolean m2=true;
-  boolean m3=true;
-  while( m1 or m2 or m3){
-    if(m1){
-      stepper1.move(2);
-      if(digitalRead(stop_pin1) == HIGH)  m1=false; 
-    }
-    if(m2){
-      stepper2.move(2); 
-      if(digitalRead(stop_pin2) == HIGH)  m2=false; 
-    }
-    if(m3){
-      stepper3.move(2); 
-      if(digitalRead(stop_pin3) == HIGH)  m3=false; 
-    }
-  }  
-}
-void centerProyector(){
-  boolean tocoIzquierda = false;
-  boolean tocoDerecha = false;
-  int pasos=0;
-  
-  while(not(tocoIzquierda)){
-    stepper4.move(-2);
-    if(analogRead(A7) > 1000) tocoIzquierda = true;
-  }
-  
-  stepper4.move(278);
+void centrarProyector(){
+  //stepper4.moveuntilAn(LSR);
+  //stepper4.move(278);
+  stepper4.moveuntilAn(LSL);
+  stepper4.move(-278);
 }
 
 void initialPosition(){
-  moveEverythingUp(LSU1,LSU2,LSU3);
-  centerProyector();
+  stepper4.allwayUp();
+  centrarProyector();
 }
 
 float distanciaMotor1(float gama, float alfaPrima){
   float d1;
-  gama=gama*PI/180;
-  alfaPrima=alfaPrima*PI/180;  
+  gama = gama*PI/180;
+  alfaPrima = alfaPrima*PI/180;  
   d1 = (487*cos(gama)*sin(alfaPrima))/(2*sqrt(1 - pow(cos(gama),2)*pow(sin(alfaPrima),2))) + (355*sin(alfaPrima)*sin(gama))/(2*sqrt(1 - pow(sin(alfaPrima),2)*pow(sin(gama),2)));
   return d1;
 }
@@ -124,9 +95,9 @@ float distanciaMotor2(float gama, float alfaPrima){
 }
 
 int distanciaAPasos(float d){
-    int steps;
-    steps = (int)(d*1600/(PI*12.3));
-    return steps;
+  int steps;
+  steps = (int)(d*1600/(PI*12.3));
+  return steps;
 }
 
 int pasosMotorCentral(float gama){
@@ -201,29 +172,26 @@ void deltaAlfaPrima(float stp){
       alfaPrima = alfaPrima;
       //Se llegó a alguna posicion extrema
     }
-  }else{
-    alfaPrima = alfaPrima;
-    //No puede entrar aqui ni a PUTAZOS
   }
 }
 
 void deltaGama(float stp){
   if( alfaPrima == 0){
     if( (tecla == 'R') and (analogRead(LSR) < 1000)){
-      gama+=stp;
+      gama += stp;
     }else if((tecla == 'L') and (analogRead(LSL) < 1000)){
-      gama-=stp;
+      gama -= stp;
     }else{
-      gama=gama;
+      gama = gama;
     }
   }else{
     if( (tecla == 'R') and ((analogRead(LSR) < 1000)) and (digitalRead(LSU2) == LOW) and (digitalRead(LSD1) == LOW) ){
-      gama+=stp;
+      gama += stp;
     }else if( (tecla == 'L') and ((analogRead(LSL) < 1000)) and (digitalRead(LSD2) == LOW) and (digitalRead(LSU1) == LOW) ){
-      gama-=stp;
+      gama -= stp;
     }
     else{
-      gama=gama;
+      gama = gama;
     }
   }
 }
@@ -244,21 +212,21 @@ void acelerometro(){
 }
 
 void nivelacion(){
-  delay(1000);
+  delay(500);
   acelerometro();
   //Nivelacion Lateral
   if (rollB > 0) {
     //bajamos el motor 2 mientras el motor 1 queda fijo
-    d2N=355*tan(rollB*PI/180);
+    d2N = 355*tan(rollB*PI/180);
     stepper2.move(-round(distanciaAPasos(d2N)));
   } else if(rollB < 0) {
     //bajamos el motor 1 mientras el motor 2 queda fijo
-    d1N=-355*tan(rollB*PI/180);
+    d1N = -355*tan(rollB*PI/180);
     stepper1.move(-round(distanciaAPasos(d1N))); 
   } else{
     //Se encuentra nivelado de manera lateral.
   }
-  delay(1000);
+  delay(500);
   acelerometro();
   //Nivelacion Frontral
   if (pitchA > 0){
@@ -292,7 +260,7 @@ void moverAnguloSerial(float angulo,float stp){
     
     d1 = distanciaMotor1(gama,alfaPrima);
     d2 = distanciaMotor2(gama,alfaPrima);
-    gamaAux=gama;    
+    gamaAux = gama;    
   }
   tecla = ' ';
 }
@@ -304,16 +272,15 @@ void setup() {
   Wire.write(0); // set to zero (wakes up the MPU-6050)
   Wire.endTransmission(true);
 
-  mult=1; // medios pasos
   //Para la base pasos positivos es izquierda
   pinMode(12,INPUT);
   pinMode(11,INPUT);
   Serial.begin(9600);
 
-  stepper1.begin(RPM,mult);
-  stepper2.begin(RPM,mult);
-  stepper3.begin(RPM,mult);
-  stepper4.begin(RPMC,mult);
+  stepper1.begin(RPM,MULT);
+  stepper2.begin(RPM,MULT);
+  stepper3.begin(RPM,MULT);
+  stepper4.begin(RPMC,MULT);
   
   stepper1.enable();
   stepper2.enable();
@@ -324,9 +291,6 @@ void setup() {
   stepper2.setRPM(RPM);
   stepper3.setRPM(RPM);
   stepper4.setRPM(RPMC);
-  
-  initialPosition();
-  nivelacion();
 
   pinMode(13,OUTPUT);
   delay(1000);
@@ -334,36 +298,47 @@ void setup() {
 }
 
 void loop() {
-
   if (irrecv.decode(&results)) {
     tecla = teclaPresionada(&results);
     irrecv.resume(); // empezamos una nueva recepción
 
-    deltaGama(1.0);
-    deltaAlfaPrima(1.0);
-    
-    stepper1.move(distanciaAPasos(d1-distanciaMotor1(gama,alfaPrima))); 
-    stepper2.move(distanciaAPasos(d2-distanciaMotor2(gama,alfaPrima)));
-    stepper4.move(pasosMotorCentral(gamaAux-gama)); 
-    
-    d1 = distanciaMotor1(gama,alfaPrima);
-    d2 = distanciaMotor2(gama,alfaPrima);
-    gamaAux = gama;
-
+    if (tecla == 'U' || tecla == 'D' || tecla == 'L' || tecla == 'R'){    
+      deltaGama(1.0);
+      deltaAlfaPrima(1.0);
+      stepper1.move(distanciaAPasos(d1-distanciaMotor1(gama,alfaPrima))); 
+      stepper2.move(distanciaAPasos(d2-distanciaMotor2(gama,alfaPrima)));
+      stepper4.move(pasosMotorCentral(gamaAux-gama)); 
+      d1 = distanciaMotor1(gama,alfaPrima);
+      d2 = distanciaMotor2(gama,alfaPrima);
+      gamaAux = gama;
+    } else if(tecla == '1' && ptecla != tecla){
+      initialPosition();
+      nivelacion();
+      stepper1.move(-1); 
+      stepper2.move(-1);
+    } else if(tecla == '3'){
+      initialPosition();
+      stepper4.allwayDo();
+      Serial.println("EXIT");
+    } else if(tecla == '#'){
+      Serial.println("EXIT");
+    } else if(tecla == '2'){
+      Serial.println("LU");
+    } else if(tecla == '8'){
+      Serial.println("LD");
+    } else if(tecla == '4'){
+      Serial.println("KL");
+    } else if(tecla == '6'){
+      Serial.println("KR");
+    } else if(tecla == '7'){
+      Serial.println("SW");
+    } else if(tecla == '5' || tecla == 'Y' ){
+      acelerometro();
+      Serial.print(rollB);
+      Serial.print(" ");
+      Serial.println(pitchA);
+    }
+    ptecla = tecla;
     tecla = ' ';
-    contador = 0;
-    NewFlag = true;
   }
-  
-  if(NewFlag){
-    contador++;
-  }
-  
-  if(contador > 2000){
-    Serial.println(alfaPrima);
-    contador = 0;
-    NewFlag = false;
-  }
-  
-  delay(1);
 }
