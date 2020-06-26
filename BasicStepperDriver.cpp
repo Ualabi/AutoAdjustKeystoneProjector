@@ -1,27 +1,12 @@
-/*
- * Generic Stepper Motor Driver Driver
- * Indexer mode only.
-
- * Copyright (C)2015-2019 Laurentiu Badea
- *
- * This file may be redistributed under the terms of the MIT license.
- * A copy of this license has been included with this distribution in the file LICENSE.
- *
- * Linear speed profile calculations based on
- * - Generating stepper-motor speed profiles in real time - David Austin, 2004
- * - Atmel AVR446: Linear speed control of stepper motor, 2006
- */
 #include "BasicStepperDriver.h"
 
-/*
- * Basic connection: only DIR, STEP are connected.
- * Microstepping controls should be hardwired.
- */
+// Funcion sencilla
 BasicStepperDriver::BasicStepperDriver(short steps, short dir_pin, short step_pin)
 :BasicStepperDriver(steps, dir_pin, step_pin, PIN_UNCONNECTED)
 {
 }
 
+//Función para enable
 BasicStepperDriver::BasicStepperDriver(short steps, short dir_pin, short step_pin, short enable_pin)
 :motor_steps(steps), dir_pin(dir_pin), step_pin(step_pin), enable_pin(enable_pin)
 {
@@ -35,14 +20,12 @@ BasicStepperDriver::BasicStepperDriver(short steps, short dir_pin, short step_pi
 	step_count = 0;
 }
 
-//Funcion agregada por Moisès Vivar
+//////////// Función agregada JH
+// Para límites superiores e inferiores
 BasicStepperDriver::BasicStepperDriver(short steps, short dir_pin, short step_pin, short stop_down, short stop_up)
 :motor_steps(steps), dir_pin(dir_pin), step_pin(step_pin), stop_down(stop_down), stop_up(stop_up)
 {}
 
-/*
- * Initialize pins, calculate timings etc
- */
 void BasicStepperDriver::begin(float rpm, short microsteps){
     pinMode(dir_pin, OUTPUT);
     digitalWrite(dir_pin, HIGH);
@@ -55,11 +38,11 @@ void BasicStepperDriver::begin(float rpm, short microsteps){
         disable();
     }
 
-    //Funcion agregadas por Moisès Vivar
+    //Funcion agregadas por JH
     if IS_CONNECTED(stop_up){
+        pinMode(stop_up, INPUT);
         if IS_CONNECTED(stop_down){
             pinMode(stop_down, INPUT);
-            pinMode(stop_up, INPUT);
         }
     }
 
@@ -71,9 +54,6 @@ void BasicStepperDriver::begin(float rpm, short microsteps){
     enable();
 }
 
-/*
- * Set target motor RPM (1-200 is a reasonable range)
- */
 void BasicStepperDriver::setRPM(float rpm){
     if (this->rpm == 0){        // begin() has not been called (old 1.0 code)
         begin(rpm, microsteps);
@@ -119,17 +99,13 @@ void BasicStepperDriver::move(long steps){
 
 //-----------------------------------------------------//
 void BasicStepperDriver::moveuntil(short stop_pin){
-    //Long para la variable pasos que utilices
-    
-    Serial.begin(9600);
-    
     dir_state = (stop_pin == stop_up) ? HIGH : LOW;
     
     last_action_end = 0;
     step_count = 0;
-    step_pulse = STEP_PULSE(150, motor_steps, microsteps);
+    step_pulse = STEP_PULSE(rpm, motor_steps, microsteps);
 
-    while ((stop_pin==A6 or stop_pin==A7) ? (analogRead(stop_pin) < 1000) : (digitalRead(stop_pin) == LOW) ){
+    while ( digitalRead(stop_pin) == LOW ){
         delayMicros(next_action_interval, last_action_end);
         digitalWrite(dir_pin, dir_state);
         digitalWrite(step_pin, HIGH);
@@ -146,40 +122,138 @@ void BasicStepperDriver::moveuntil(short stop_pin){
     }
     last_action_end = 0;
     next_action_interval = 0;
-    //return StepsUsed;
 }
+
 void BasicStepperDriver::moveuntilAn(short stop_pin){
-    //Long para la variable pasos que utilices
-//    
-//    dir_state = (stop_pin == stop_up) ? HIGH : LOW;
-//    last_action_end = 0;
-//    steps_remaining = abs(steps);
-//    step_count = 0;
-//    rest = 0;
-//    steps_to_cruise = 0;
-//    steps_to_brake = 0;
-//    step_pulse = cruise_step_pulse = STEP_PULSE(rpm, motor_steps, microsteps);
-//    if (time > steps_remaining * step_pulse){
-//        step_pulse = (float)time / steps_remaining;
-//    }
+    dir_state = (stop_pin == stop_up) ? HIGH : LOW;
+    
+    last_action_end = 0;
+    step_count = 0;
+    step_pulse = STEP_PULSE(rpm, motor_steps, microsteps);
+
+    while ( analogRead(stop_pin) < 1000 ){
+        delayMicros(next_action_interval, last_action_end);
+        digitalWrite(dir_pin, dir_state);
+        digitalWrite(step_pin, HIGH);
+        unsigned m = micros();
+        m = micros() - m;
+        if (m < step_high_min){
+            delayMicros(step_high_min-m);
+            m = step_high_min;
+        };
+        digitalWrite(step_pin, LOW);
+        step_count++;
+        last_action_end = micros();
+        next_action_interval = (step_pulse > m) ? step_pulse - m : 1;
+    }
+    last_action_end = 0;
+    next_action_interval = 0;
 }
+
 void BasicStepperDriver::moveuntilDi(short stop_pin){
-    //Long para la variable pasos que utilices
-//    
-//    dir_state = (stop_pin == stop_up) ? HIGH : LOW;
-//    last_action_end = 0;
-//    steps_remaining = abs(steps);
-//    step_count = 0;
-//    rest = 0;
-//    steps_to_cruise = 0;
-//    steps_to_brake = 0;
-//    step_pulse = cruise_step_pulse = STEP_PULSE(rpm, motor_steps, microsteps);
-//    if (time > steps_remaining * step_pulse){
-//        step_pulse = (float)time / steps_remaining;
-//    }
+    dir_state = (stop_pin == stop_up) ? HIGH : LOW;
+    
+    last_action_end = 0;
+    step_count = 0;
+    step_pulse = STEP_PULSE(rpm, motor_steps, microsteps);
+
+    while ( digitalRead(stop_pin) == LOW ){
+        delayMicros(next_action_interval, last_action_end);
+        digitalWrite(dir_pin, dir_state);
+        digitalWrite(step_pin, HIGH);
+        unsigned m = micros();
+        m = micros() - m;
+        if (m < step_high_min){
+            delayMicros(step_high_min-m);
+            m = step_high_min;
+        };
+        digitalWrite(step_pin, LOW);
+        step_count++;
+        last_action_end = micros();
+        next_action_interval = (step_pulse > m) ? step_pulse - m : 1;
+    }
+    last_action_end = 0;
+    next_action_interval = 0;
 }
+
+void BasicStepperDriver::allwayUp(void){
+    bool u1 = true, u2 = true, u3 = true;
+    
+    last_action_end = 0;
+    step_pulse = STEP_PULSE(rpm/3, motor_steps, microsteps);
+
+    digitalWrite(8, HIGH);
+    digitalWrite(6, HIGH);
+    digitalWrite(4, HIGH);
+    while ( u1 || u2 || u3 ){
+        delayMicros(next_action_interval, last_action_end);
+        if (u1) digitalWrite(9, HIGH);
+        if (u2) digitalWrite(7, HIGH);
+        if (u3) digitalWrite(5, HIGH);
+        
+        unsigned m = micros();
+        m = micros() - m;
+        if (m < step_high_min){
+            delayMicros(step_high_min-m);
+            m = step_high_min;
+        };
+        
+        if (u1) digitalWrite(9, LOW);
+        if (u2) digitalWrite(7, LOW);
+        if (u3) digitalWrite(5, LOW);
+
+        if(u1 && digitalRead(11) == HIGH) u1 = false;
+        if(u2 && digitalRead(A1) == HIGH) u2 = false;
+        if(u3 && digitalRead(A3) == HIGH) u3 = false;
+        
+        last_action_end = micros();
+        next_action_interval = (step_pulse > m) ? step_pulse - m : 1;
+    }
+    last_action_end = 0;
+    next_action_interval = 0;
+}
+
+
+void BasicStepperDriver::allwayDo(void){
+    bool d1 = true, d2 = true, d3 = true;
+    
+    last_action_end = 0;
+    step_pulse = STEP_PULSE(rpm/3, motor_steps, microsteps);
+    
+    digitalWrite(8, LOW);
+    digitalWrite(6, LOW);
+    digitalWrite(4, LOW);
+    unsigned m = 0;
+    while ( d1 || d2 || d3 ){
+        delayMicros(next_action_interval, last_action_end);
+        if (d1) digitalWrite(9, HIGH);
+        if (d2) digitalWrite(7, HIGH);
+        if (d3) digitalWrite(5, HIGH);
+        
+        m = micros();
+        m = micros() - m;
+        if (m < step_high_min){
+            delayMicros(step_high_min-m);
+            m = step_high_min;
+        };
+        
+        if (d1) digitalWrite(9, LOW);
+        if (d2) digitalWrite(7, LOW);
+        if (d3) digitalWrite(5, LOW);
+
+        if(d1 && digitalRead(12) == HIGH) d1 = false;
+        if(d2 && digitalRead(A0) == HIGH) d2 = false;
+        if(d3 && digitalRead(A2) == HIGH) d3 = false;
+        
+        last_action_end = micros();
+        next_action_interval = (step_pulse > m) ? step_pulse - m : 1;
+    }
+    last_action_end = 0;
+    next_action_interval = 0;
+}
+
 ////////////////////////////////////////////////////////
-//Funcion agregada por Moisès Vivar
+//Funcion agregada por MV
 void BasicStepperDriver::centrarMotor(void){
   moveuntil(A6);
   moveuntil(A7);
